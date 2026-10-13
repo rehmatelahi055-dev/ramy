@@ -1,56 +1,69 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from decimal import Decimal
-from typing import Optional
+from typing import Iterable, List
 
-from .config import BotConfig, TradingMode
-from .market_data import MarketDataStore
-from .risk import RiskEngine
-from .strategy import SignalCandidate, StrategyEngine
-
-
-@dataclass
-class BotSnapshot:
-    mode: TradingMode
-    equity: Decimal
-    balance: Decimal
-    open_positions: int
-    active_circuit_breakers: int
+from .config import BotConfig
+from .market_data import Candle, candles_from_series
+from .strategy import StrategyEngine
 
 
-class BotEngine:
-    def __init__(self, config: BotConfig, market_data: Optional[MarketDataStore] = None) -> None:
+class SymbolScanner:
+    def __init__(self, config: BotConfig, strategy: StrategyEngine | None = None) -> None:
         self.config = config
-        self.market_data = market_data or MarketDataStore()
-        self.strategy = StrategyEngine(config)
-        self.risk = RiskEngine(config)
+        self.strategy = strategy or StrategyEngine(config)
 
-    def scan_symbol(self, symbol: str, candles: list[dict]) -> Optional[SignalCandidate]:
-        if self.config.mode == TradingMode.LIVE:
-            return None
-        return self.strategy.generate_signal(symbol, candles)
+    def _base_symbol_list(self) -> list[str]:
+        return [
+            "BTCUSDT",
+            "ETHUSDT",
+            "SOLUSDT",
+            "BNBUSDT",
+            "XRPUSDT",
+            "ADAUSDT",
+            "DOGEUSDT",
+            "LINKUSDT",
+            "AVAXUSDT",
+            "MATICUSDT",
+        ]
 
-    def run_cycle(self, symbol: str, candles: list[dict], balance: Decimal, positions: list[dict]) -> Optional[SignalCandidate]:
-        signal = self.scan_symbol(symbol, candles)
-        if signal is None:
-            return None
-        risk = self.risk.calculate_trade_risk(
-            equity=balance,
-            current_positions=positions,
-            entry_price=signal.entry_price or Decimal("1"),
-            stop_loss=signal.stop_loss or Decimal("1"),
-            side=signal.side,
-        )
-        if not risk.passes:
-            return None
-        return signal
+    def scan(self, symbol_prices: dict[str, list[float]]) -> List[dict]:
+        candidates: List[dict] = []
+        for symbol, series in symbol_prices.items():
+            candles = [c.__dict__ for c in candles_from_series(series, length=len(series))]
+            signal = self.strategy.generate_signal(symbol, candles)
+            if signal is not None:
+                candidates.append({
+                    "symbol": symbol,
+                    "side": signal.side,
+                    "score": str(signal.score),
+                    "entry": str(signal.entry_price),
+                    "stop": str(signal.stop_loss),
+                    "target": str(signal.take_profit),
+                })
+        return sorted(candidates, key=lambda item: float(item["score"]), reverse=True)[0:self.config.max_symbol_scan_batch]
 
-    def snapshot(self, balance: Decimal, open_positions: int, circuit_breakers: int) -> BotSnapshot:
-        return BotSnapshot(
-            mode=self.config.mode,
-            equity=balance,
-            balance=balance,
-            open_positions=open_positions,
-            active_circuit_breakers=circuit_breakers,
-        )
+
+def build_symbol_prices() -> dict[str, list[float]]:
+    prices: dict[str, list[float]] = {}
+    base = 100.0
+    for idx, symbol in enumerate([
+        "BTCUSDT",
+        "ETHUSDT",
+        "SOLUSDT",
+        "BNBUSDT",
+        "XRPUSDT",
+        "ADAUSDT",
+        "DOGEUSDT",
+        "LINKUSDT",
+        "AVAXUSDT",
+        "MATICUSDT",
+    ]):
+        trend = 1.002 + (idx * 0.0004)
+        series: list[float] = []
+        value = base
+        for step in range(150):
+            value = value * trend
+            series.append(value)
+        prices[symbol] = series
+    return prices

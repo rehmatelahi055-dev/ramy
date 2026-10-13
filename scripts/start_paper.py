@@ -1,17 +1,8 @@
-#!/usr/bin/env python3
-
-from __future__ import annotations
-
-import os
-import subprocess
-import sys
-
-
-def main() -> None:
-    os.environ.setdefault("BOT_MODE", "PAPER")
-    os.environ.setdefault("LIVE_ENABLED", "false")
-    subprocess.run([sys.executable, "-m", "ramy", "--mode", "PAPER"], check=True)
+pytest>=8.0.0
+python-dotenv>=1.0.0
+numpy>=1.26.0
+pandas>=2.0.0
+requests>=2.31.0
+python-binance>=1.0.19
 
 
-if __name__ == "__main__":
-    main()

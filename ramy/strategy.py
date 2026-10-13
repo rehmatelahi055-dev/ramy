@@ -1,79 +1,88 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Any, Dict, Iterable, List, Optional
-
-from .config import BotConfig
-from .indicators import compute_indicator_snapshot
-from .market_data import Candle
+from collections.abc import Iterable
+from typing import Dict, List, Optional
 
 
-@dataclass
-class SignalCandidate:
-    symbol: str
-    side: str
-    score: Decimal
-    reason: str
-    entry_price: Optional[Decimal] = None
-    stop_loss: Optional[Decimal] = None
-    take_profit: Optional[Decimal] = None
-    confidence: Decimal = Decimal("0")
+def ema(values: list[float], span: int) -> Optional[float]:
+    if not values or span <= 0:
+        return None
+    k = 2.0 / (span + 1.0)
+    result = float(values[0])
+    for value in values[1:]:
+        result = (float(value) * k) + (result * (1.0 - k))
+    return result
 
 
-class StrategyEngine:
-    def __init__(self, config: BotConfig) -> None:
-        self.config = config
+def rsi(values: list[float], period: int = 14) -> Optional[float]:
+    if len(values) < period + 1:
+        return None
+    deltas = [values[i] - values[i - 1] for i in range(1, len(values))]
+    gains = [max(d, 0.0) for d in deltas]
+    losses = [abs(min(d, 0.0)) for d in deltas]
+    avg_gain = sum(gains[-period:]) / period
+    avg_loss = sum(losses[-period:]) / period
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return 100.0 - (100.0 / (1.0 + rs))
 
-    def _score_signal(self, trend_score: int, momentum_score: int, volume_score: int, quality_score: int) -> Decimal:
-        total = Decimal(trend_score + momentum_score + volume_score + quality_score)
-        # scale to 0-1
-        return total / Decimal("100")
 
-    def _generate_buy(self, symbol: str, candles: List[dict], indicators: Dict[str, Optional[float]]) -> Optional[SignalCandidate]:
-        if not candles:
-            return None
-        close = Decimal(str(candles[-1][4]))
-        ema9 = indicators.get("ema_9")
-        ema21 = indicators.get("ema_21")
-        ema50 = indicators.get("ema_50")
-        rsi = indicators.get("rsi_14")
-        atr = indicators.get("atr_14")
-        adx = indicators.get("adx_14")
-        rv = indicators.get("relative_volume")
-        recent_high = indicators.get("recent_high", 0)
-        recent_low = indicators.get("recent_low", 0)
-        if None in {ema9, ema21, ema50, rsi, atr, adx, rv}:
-            return None
+def atr(highs: list[float], lows: list[float], closes: list[float], period: int = 14) -> Optional[float]:
+    if len(closes) < period + 1:
+        return None
+    true_ranges: list[float] = []
+    for i in range(1, min(len(closes), len(highs), len(lows))):
+        prev_close = closes[i - 1]
+        tr = max(highs[i] - lows[i], abs(highs[i] - prev_close), abs(lows[i] - prev_close))
+        true_ranges.append(tr)
+    if not true_ranges:
+        return None
+    return sum(true_ranges[-period:]) / period
 
-        # Basic bullish checks for spot buy
-        trend_ok = ema9 > ema21 > ema50
-        momentum_ok = rsi is not None and 40.0 <= rsi <= 70.0
-        volume_ok = rv is not None and rv >= float(self.config.min_relative_volume)
-        trend_strength = adx >= 20.0
-        price_near_support = close <= Decimal(str(recent_high)) and close >= Decimal(str(recent_low))
 
-        if not (trend_ok and momentum_ok and volume_ok and trend_strength and price_near_support):
-            return None
+def adx(highs: list[float], lows: list[float], closes: list[float], period: int = 14) -> Optional[float]:
+    if len(closes) < period + 1:
+        return None
+    values: list[float] = []
+    for i in range(1, len(closes)):
+        up = highs[i] - highs[i - 1]
+        down = lows[i - 1] - lows[i]
+        if up > down and up > 0:
+            values.append(up)
+        elif down > up and down > 0:
+            values.append(down)
+        else:
+            values.append(0.0)
+    if not values:
+        return None
+    return sum(values[-period:]) / period
 
-        score = self._score_signal(40, 25, 20, 15)
-        reason = "Spot buy: EMA alignment, RSI range, volume, and ADX trend strength"
-        stop = max(Decimal(str(recent_low)) * Decimal("0.995"), close - Decimal(str(atr or 0)) * Decimal("1.5"))
-        tp = close * (Decimal("1") + Decimal(str(self.config.take_profit_rr)) * Decimal("0.01"))
-        return SignalCandidate(
-            symbol=symbol,
-            side="BUY",
-            score=score,
-            reason=reason,
-            entry_price=close,
-            stop_loss=stop,
-            take_profit=tp,
-            confidence=Decimal("0.7"),
-        )
 
-    def generate_signal(self, symbol: str, candles: List[dict]) -> Optional[SignalCandidate]:
-        if len(candles) < self.config.min_candles_required:
-            return None
-        indicators = compute_indicator_snapshot(candles)
-        buy = self._generate_buy(symbol, candles, indicators)
-        return buy
+def relative_volume(volumes: list[float], period: int = 20) -> Optional[float]:
+    if len(volumes) < period:
+        return None
+    recent = sum(volumes[-period:]) / period
+    base = sum(volumes[:-period]) / max(1, len(volumes[:-period])) if len(volumes[:-period]) else recent
+    if base == 0:
+        return None
+    return recent / base
+
+
+def compute_indicator_snapshot(candles: list[dict]) -> Dict[str, Optional[float]]:
+    closes = [float(c[4]) for c in candles]
+    highs = [float(c[2]) for c in candles]
+    lows = [float(c[3]) for c in candles]
+    volumes = [float(c[5]) for c in candles]
+    return {
+        "ema_9": ema(closes, 9),
+        "ema_21": ema(closes, 21),
+        "ema_50": ema(closes, 50),
+        "ema_200": ema(closes, 200),
+        "rsi_14": rsi(closes, 14),
+        "atr_14": atr(highs, lows, closes, 14),
+        "adx_14": adx(highs, lows, closes, 14),
+        "relative_volume": relative_volume(volumes, 20),
+        "recent_high": max(closes[-20:]) if len(closes) >= 20 else max(closes),
+        "recent_low": min(closes[-20:]) if len(closes) >= 20 else min(closes),
+    }

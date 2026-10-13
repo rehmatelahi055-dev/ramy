@@ -1,8 +1,12 @@
-#!/usr/bin/env pwsh
+#!/usr/bin/env python3
+from __future__ import annotations
 
-python -m venv .venv
-. .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-Copy-Item .env.example .env -ErrorAction SilentlyContinue
-Write-Host "Environment ready. Run: python -m ramy --mode PAPER"
+import os
+
+os.environ.setdefault("BOT_MODE", "PAPER")
+os.environ.setdefault("LIVE_ENABLED", "false")
+
+from ramy.engine import main
+
+if __name__ == "__main__":
+    main()

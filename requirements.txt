@@ -1,6 +1,17 @@
-pytest>=8.0.0
-python-dotenv>=1.0.0
-pandas>=2.0.0
-numpy>=1.26.0
-requests>=2.31.0
-python-binance>=1.0.19
+from pathlib import Path
+
+
+def test_repository_has_main_files() -> None:
+    required = [
+        Path("README.md"),
+        Path("requirements.txt"),
+        Path(".env.example"),
+        Path("ramy/config.py"),
+        Path("ramy/strategy.py"),
+        Path("ramy/risk.py"),
+        Path("ramy/order.py"),
+        Path("ramy/scanner.py"),
+        Path("tests/test_smoke.py"),
+    ]
+    for file in required:
+        assert file.exists(), f"missing: {file}"

@@ -1,45 +1,20 @@
-from __future__ import annotations
-
-from typing import Iterable
-
-
-def build_trending_candles(length: int = 250) -> list[dict]:
-    candles: list[dict] = []
-    price = 100.0
-    for i in range(length):
-        price = price * 1.0025
-        candles.append([
-            i * 300000,
-            price - 0.5,
-            price + 2.5,
-            price - 1.0,
-            price,
-            1000.0,
-            (i + 1) * 300000,
-            0,
-            1,
-            500.0,
-            500.0,
-        ])
-    return candles
-
-
-def build_bearish_candles(length: int = 250) -> list[dict]:
-    candles: list[dict] = []
-    price = 100.0
-    for i in range(length):
-        price = price * 0.9975
-        candles.append([
-            i * 300000,
-            price + 0.5,
-            price + 1.5,
-            price - 2.5,
-            price,
-            1100.0,
-            (i + 1) * 300000,
-            0,
-            1,
-            550.0,
-            550.0,
-        ])
-    return candles
+BOT_MODE=PAPER
+LIVE_ENABLED=false
+BOT_LOG_LEVEL=INFO
+STARTING_EQUITY=100
+MAX_CONCURRENT_POSITIONS=5
+INVEST_PER_TRADE=10
+CAP_TOTAL_INVESTMENT=50
+RISK_PER_TRADE_PERCENT=0.5
+DAILY_REALIZED_LOSS_LIMIT_PERCENT=2
+MAX_CONSECUTIVE_LOSSES=3
+DEFAULT_LEVERAGE=1
+MARGIN_MODE=ISOLATED
+MIN_CANDLES_REQUIRED=120
+TAKE_PROFIT_RR=2.0
+STOP_LOSS_ATR_MULT=1.5
+BINANCE_API_KEY=
+BINANCE_API_SECRET=
+BINANCE_TESTNET_API_KEY=
+BINANCE_TESTNET_API_SECRET=
+LIVE_CONFIRMATION=true
